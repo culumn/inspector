@@ -11,9 +11,10 @@ import {
   ResourceReference,
   PromptReference,
 } from "@modelcontextprotocol/sdk/types.js";
+import { UriTemplate } from "@modelcontextprotocol/sdk/shared/uriTemplate.js";
 import { AlertCircle, ChevronRight, FileText, RefreshCw } from "lucide-react";
 import ListPane from "./ListPane";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useCompletionState } from "@/lib/hooks/useCompletionState";
 import JsonView from "./JsonView";
 
@@ -67,6 +68,11 @@ const ResourcesTab = ({
   const [templateValues, setTemplateValues] = useState<Record<string, string>>(
     {},
   );
+  const uriTemplate = useMemo(
+    () =>
+      selectedTemplate ? new UriTemplate(selectedTemplate.uriTemplate) : null,
+    [selectedTemplate],
+  );
 
   const { completions, clearCompletions, requestCompletions } =
     useCompletionState(handleCompletion, completionsSupported);
@@ -74,16 +80,6 @@ const ResourcesTab = ({
   useEffect(() => {
     clearCompletions();
   }, [clearCompletions]);
-
-  const fillTemplate = (
-    template: string,
-    values: Record<string, string>,
-  ): string => {
-    return template.replace(
-      /{([^}]+)}/g,
-      (_, key) => values[key] || `{${key}}`,
-    );
-  };
 
   const handleTemplateValueChange = async (key: string, value: string) => {
     setTemplateValues((prev) => ({ ...prev, [key]: value }));
@@ -102,7 +98,7 @@ const ResourcesTab = ({
 
   const handleReadTemplateResource = () => {
     if (selectedTemplate) {
-      const uri = fillTemplate(selectedTemplate.uriTemplate, templateValues);
+      const uri = uriTemplate!.expand(templateValues);
       readResource(uri);
       // We don't have the full Resource object here, so we create a partial one
       setSelectedResource({ uri, name: uri } as Resource);
@@ -237,28 +233,25 @@ const ResourcesTab = ({
                 <p className="text-sm text-gray-600">
                   {selectedTemplate.description}
                 </p>
-                {selectedTemplate.uriTemplate
-                  .match(/{([^}]+)}/g)
-                  ?.map((param) => {
-                    const key = param.slice(1, -1);
-                    return (
-                      <div key={key}>
-                        <Label htmlFor={key}>{key}</Label>
-                        <Combobox
-                          id={key}
-                          placeholder={`Enter ${key}`}
-                          value={templateValues[key] || ""}
-                          onChange={(value) =>
-                            handleTemplateValueChange(key, value)
-                          }
-                          onInputChange={(value) =>
-                            handleTemplateValueChange(key, value)
-                          }
-                          options={completions[key] || []}
-                        />
-                      </div>
-                    );
-                  })}
+                {uriTemplate!.variableNames.map((paramName) => {
+                  return (
+                    <div key={paramName}>
+                      <Label htmlFor={paramName}>{paramName}</Label>
+                      <Combobox
+                        id={paramName}
+                        placeholder={`Enter ${paramName}`}
+                        value={templateValues[paramName] || ""}
+                        onChange={(value) =>
+                          handleTemplateValueChange(paramName, value)
+                        }
+                        onInputChange={(value) =>
+                          handleTemplateValueChange(paramName, value)
+                        }
+                        options={completions[paramName] || []}
+                      />
+                    </div>
+                  );
+                })}
                 <Button
                   onClick={handleReadTemplateResource}
                   disabled={Object.keys(templateValues).length === 0}
